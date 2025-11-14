@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<title>Co na to BŘEZÁKY – Načítání z Google Sheets</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #0a1a3c;
+        color: white;
+        margin: 0;
+        padding: 0;
+        text-align: center;
+    }
+    h1, h2 {
+        margin: 10px 0;
+    }
+    .teams {
+        display: flex;
+        justify-content: center;
+        gap: 50px;
+        font-size: 24px;
+        margin-bottom: 5px;
+    }
+    .scores {
+        display: flex;
+        justify-content: center;
+        gap: 50px;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    .game {
+        margin: 20px auto;
+        width: 90%;
+        max-width: 800px;
+    }
+    .answer {
+        background: #123;
+        padding: 20px;
+        margin: 10px 0;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 22px;
+    }
+    .answer.revealed {
+        background: #1c3d7a;
+    }
+    button {
+        margin-top: 20px;
+        padding: 10px 20px;
+        font-size: 18px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    .tabs {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background: #09132b;
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        padding: 10px 0;
+    }
+</style>
+</head>
+<body>
+
+<div id="pageGame">
+<h1>Co na to BŘEZÁKY</h1>
+<div class="teams">
+    <div id="headA">Tým A</div>
+    <div id="headB">Tým B</div>
+</div>
+<div class="scores">
+    <div id="scoreHeadA">0 bodů</div>
+    <div id="scoreHeadB">0 bodů</div>
+</div>
+<div class="game">
+    <h2 id="question">Zde bude otázka…</h2>
+    <div id="answers"></div>
+</div>
+<button id="btnReset">Nová otázka</button>
+</div>
+
+<div id="pageAdmin" style="display:none;padding:20px;">
+    <h2>Administrace</h2>
+    <h3>Názvy týmů</h3>
+    Tým A: <input id="nameA_admin" value="Tým A" /><br><br>
+    Tým B: <input id="nameB_admin" value="Tým B" /><br><br>
+
+    <h3>Pořadí otázek</h3>
+    <ul id="questionOrder"></ul>
+</div>
+
+<div class="tabs">
+    <button onclick="showGame()">Hra</button>
+    <button onclick="showAdmin()">Administrace</button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    window.questions = [];
+    let scoreA = 0;
+    let scoreB = 0;
+
+    function addA(p){ scoreA+=p; document.getElementById('scoreHeadA').textContent = scoreA+' bodů'; }
+    function addB(p){ scoreB+=p; document.getElementById('scoreHeadB').textContent = scoreB+' bodů'; }
+
+    function loadRandom(){
+        if(window.questions.length===0) return;
+        const random = window.questions[Math.floor(Math.random()*window.questions.length)];
+        document.getElementById('question').textContent = random.q;
+        const answersDiv = document.getElementById('answers');
+        answersDiv.innerHTML='';
+        random.a.forEach((ans,i)=>{
+            const div=document.createElement('div');
+            div.className='answer';
+            div.innerHTML=`<strong>${i+1}.</strong> Klikni pro odhalení`;
+            div.addEventListener('click',()=>{
+                if(div.classList.contains('revealed')) return;
+                div.classList.add('revealed');
+                div.innerHTML=`${ans.text} — <strong>${ans.points} bodů</strong><br><br>`;
+                const btnA=document.createElement('button');
+                btnA.textContent=`Tým A +${ans.points}`;
+                btnA.addEventListener('click',()=>addA(ans.points));
+                const btnB=document.createElement('button');
+                btnB.textContent=`Tým B +${ans.points}`;
+                btnB.addEventListener('click',()=>addB(ans.points));
+                div.appendChild(btnA);
+                div.appendChild(btnB);
+            });
+            answersDiv.appendChild(div);
+        });
+    }
+
+    function renameTeams(){
+        document.getElementById('headA').textContent = document.getElementById('nameA_admin')?.value || 'Tým A';
+        document.getElementById('headB').textContent = document.getElementById('nameB_admin')?.value || 'Tým B';
+    }
+
+    function updateQuestionOrder(){
+        const ul = document.getElementById('questionOrder');
+        ul.innerHTML = '';
+        window.questions.forEach((q,i)=>{
+            const li = document.createElement('li');
+            li.textContent = `${i+1}. ${q.q}`;
+            ul.appendChild(li);
+        });
+    }
+
+    function loadFromCSV(url){
+        fetch(url)
+        .then(response => response.text())
+        .then(data => {
+            const rows = data.split('\n').map(r => r.trim());
+            for(let i=0; i<rows.length; i+=8){
+                const qName = rows[i];
+                if(!qName) continue;
+                const answers = [];
+                for(let j=1; j<=6; j++){
+                    const text = rows[i+j].split(',')[0] || '';
+                    const points = parseInt(rows[i+j].split(',')[1]) || 0;
+                    if(text) answers.push({text, points});
+                }
+                if(answers.length>0) window.questions.push({q: qName, a: answers});
+            }
+            updateQuestionOrder();
+        })
+        .catch(err => console.error('Chyba při načítání CSV:', err));
+    }
+
+    document.getElementById('btnReset')?.addEventListener('click',loadRandom);
+    document.getElementById('nameA_admin')?.addEventListener('change',renameTeams);
+    document.getElementById('nameB_admin')?.addEventListener('change',renameTeams);
+
+    loadFromCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vRX7Fg58qkWSmEu2eqnCV86qQWqy70EGa3z38lIndaCQQI4FBGa2myY4w8PkPdetuAuTLK7VOj4-iJS/pub?gid=497422765&single=true&output=csv');
+
+    window.showGame=function(){document.getElementById('pageGame').style.display='block';document.getElementById('pageAdmin').style.display='none';};
+    window.showAdmin=function(){document.getElementById('pageGame').style.display='none';document.getElementById('pageAdmin').style.display='block';};
+});
+</script>
+
+</body>
+</html>
